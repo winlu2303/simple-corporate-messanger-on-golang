@@ -14,4 +14,80 @@ const(
   pongWait = 60*time.Second
   pingPeriod = (pongWait-(pongWait/3))
 )
+
 var (
+  //Acceptable connection headers
+  origin = "http://localhost:3000"
+  upgrader = websocket.Upgrader {
+    ReadBufferSize: 1024, 
+    WriteBufferSize: 1024,
+    CheckOrigin:  
+        func(r*http.Request)bool {
+            return r.Host == origin
+        },
+    }
+}
+
+type client struct {
+  conn *websocket.Conn
+  send chan[]byte
+  room string
+}
+
+var (
+  clients = make(mapstring*client)
+  broadcast = make(chan message)
+  register = make(chan *client)
+  unregister = make(chan *client)
+)
+
+type message struct {
+  room string
+  from string
+  content string
+}
+
+func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
+  conn, err := upgrader.Upgrade(w, r, nil)
+  if err != nil {
+    log.Println("Connection update error:", err)
+    return
+}
+
+//Getting a room from the request parameters
+room := r.URL.Query().Get("room")
+if room == ""
+  SendError(w, http.StatusBadRequest, "The room is not specified")
+  return
+}
+
+//Create new client
+client := &client {
+  conn: conn,
+  send: make(chan[]byte, 256), 
+  room: room,
+}
+register <- client
+
+go client.writePump()
+go.client.readPump()
+}
+
+func(c *client)writePump() {
+  ticker := time.NewTicker(pingPeriod)
+  defer func() {
+    ticker.Stop()
+    c.conn.Close()
+  } ()
+for {
+  select {
+  case message, ok := <-c.send: c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+  if !ok {
+    c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+    return
+}
+w, err := c.conn.NextWriter(websocket.TextMessage)
+if err != nil {
+  return
+}
+_, err = w.Write(message)
