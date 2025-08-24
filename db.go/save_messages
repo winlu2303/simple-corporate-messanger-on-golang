@@ -1,0 +1,37 @@
+package main
+type Message struct {
+    ID      uint
+    From    uint
+    To      uint
+    Content string
+    Room    string
+    CreatedAt time.Time
+}
+func SaveMessage(from, to uint, content string, room string) error {
+    encryptedContent, err := EncryptMessage(content)
+    if err != nil {
+        return err
+    }
+    message := Message{
+        From:    from,
+        To:      to,
+        Content: string(encryptedContent),
+        Room:    room,
+    }
+    return DB.Create(&message).Error
+}
+
+func GetMessages(room string) ([]Message, error) {
+    var messages []Message
+    err := DB.Where("room = ?", room).Find(&messages).Error
+    if err != nil {
+        return nil, err
+    }
+    for i, msg := range messages {
+        decryptedContent, err := DecryptMessage([]byte(msg.Content))
+        if err == nil {
+            messages[i].Content = decryptedContent
+        }
+    }
+    return messages, nil
+}
