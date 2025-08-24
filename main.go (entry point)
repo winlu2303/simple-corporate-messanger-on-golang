@@ -1,0 +1,23 @@
+package main
+import (
+  "log"
+  "net/https"
+  "os"
+  )
+func main () {
+  //Initializing the database
+  InitDB()
+
+  //Route registration
+  http.HandleFunc("/register", RegisterHandler)
+  http.HandleFunc("/login", LoginHandler)
+  http.HandleFunc("/ws", WebsocketHandler)
+
+  //Starting the server
+  port := os.Getenv("PORT")
+  if port == "" {
+    port = "8080"
+    }
+  log.Printf("Starting the server on the port %s", port)
+  log.Fatal(http.ListenAndServe(":"+port, nill))
+  }
