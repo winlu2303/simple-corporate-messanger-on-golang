@@ -1,1 +1,17 @@
 package main 
+
+import (
+  "log"
+  "net/http"
+  "time"
+  "github.com/gorilla/websocket"
+)
+
+const(
+  //Lifetime of websocket link
+  writeWait = 10*time.Second
+  //The interval between peaks of activity
+  pongWait = 60*time.Second
+  pingPeriod = (pongWait-(pongWait/3))
+)
+var (
