@@ -1,0 +1,29 @@
+package main
+import (
+  "log"
+  "string"
+  "json"
+  "net"
+  )
+  
+func SendError(w http.ResponseWriter, code int, message string) {
+    w.WriteHeader(code)
+    json.NewEncoder(w).Encode(map[string]string{"error": message}) 
+    } 
+
+func HandleError(err error, w http.ResponseWriter) {
+    if err != nil {
+        log.Printf("Error: %v", err)
+        SendError(w, http.StatusInternalServerError, "An internal error has occurred")
+    }
+}
+
+func ValidateMessage(message string) error {
+    if len(message) == 0 {
+        return errors.New("The message cannot be empty")
+    }
+    if len(message) > 1000 {
+        return errors.New("The message is too long")
+    }
+    return nil
+}
