@@ -26,7 +26,6 @@ var (
             return r.Host == origin
         },
     }
-}
 
 type client struct {
   conn *websocket.Conn
@@ -67,11 +66,9 @@ client := &client {
   send: make(chan[]byte, 256), 
   room: room,
 }
-register <- client
 
-go client.writePump()
+go.client.writePump()
 go.client.readPump()
-}
 
 func(c *client)writePump() {
   ticker := time.NewTicker(pingPeriod)
@@ -140,4 +137,6 @@ encryptedMessage, err := EncryptMessage(string(message)) if err != nil {
 err = SaveMessage(c.room, encryptedMessage) if err != nil {
     log.Printf("Error saving: %v", err)
     continue
-}
+        }
+      }
+    }
