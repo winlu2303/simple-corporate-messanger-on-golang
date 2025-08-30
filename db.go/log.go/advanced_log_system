@@ -1,0 +1,185 @@
+package main
+import (
+    "log"
+    "os"
+    "time"
+    "github.com/sirupsen/logrus"
+    "github.com/robfig/cron/v3"
+    "github.com/rs/zerolog"
+)
+var (
+    logger *logrus.Logger
+    logFile *os.File
+    cron *cron.Cron
+)
+
+func initLogger() {
+    var err error
+    logFile, err = os.OpenFile("messenger.log", os.OCREATE|os.OWRONLY|os.O_APPEND, 0666)
+    if err != nil {
+        log.Fatalf("Create log file error: %v", err)
+    }
+    defer logFile.Close()
+    // Setting logrus
+    logger = logrus.New()
+    logger.Out = logFile
+    logger.Formatter = &logrus.JSONFormatter{}
+    logger.Level = logrus.InfoLevel
+    cron = cron.New(cron.WithSeconds())
+    cron.AddFunc("@every 24h", rotateLogs)
+    cron.Start()
+}
+//Rotate logs
+func rotateLogs() {
+    err := os.Rename("messenger.log", time.Now().Format("messenger_2006-01-02.log"))
+    if err != nil {
+        logger.Error("Rotate log error", err)
+        return
+    }
+    logFile, _ = os.Create("messenger.log")
+}
+//Special log level
+func LogInfo(message string, fields map[string]interface{}) {
+    logger.WithFields(fields).Info(message)
+}
+
+func LogError(message string, err error, fields map[string]interface{}) {
+    logger.WithFields(fields).WithError(err).Error(message)
+}
+
+func LogWarning(message string, fields map[string]interface{}) {
+    logger.WithFields(fields).Warn(message)
+}
+
+func LogDebug(message string, fields map[string]interface{}) {
+    logger.WithFields(fields).Debug(message)
+}
+
+func LogClientConnection(addr string) {
+    LogInfo("New connect", map[string]interface{}{
+        "address": addr,
+        "timestamp": time.Now(),
+    })
+}
+func LogClientDisconnect(addr string) {
+    LogInfo("Disconnect user", map[string]interface{}{
+        "address": addr,
+        "timestamp": time.Now(),
+    })
+}
+func LogMessage(from, to string, content string) {
+    LogInfo("Message sent", map[string]interface{}{
+        "from": from,
+        "to": to,
+        "timestamp": time.Now(),
+    })
+}
+
+func InitELKLogging(host string, port int) {
+    zerolog.Logger.Info().
+        Socket(host, port).
+        Send()
+}
+type LogConfig struct {
+    LogLevel string
+    LogFile string
+    ELKHost string
+    ELKPort int
+}
+func LoadConfig(config LogConfig) {
+    switch config.LogLevel {
+    case "debug":
+        logger.SetLevel(logrus.DebugLevel)
+    case "info":
+        logger.SetLevel(logrus.InfoLevel)
+    case "warn":
+        logger.SetLevel(logrus.WarnLevel)
+    case "error":
+        logger.SetLevel(logrus.ErrorLevel)
+    }
+    if config.ELKHost != "" {
+        InitELKLogging(config.ELKHost, config.ELKPort)
+    }
+}
+
+func main() {
+    config := LogConfig{
+        LogLevel:  "info",
+        LogFile:   "messenger.log",
+        ELKHost:   "localhost",
+        ELKPort:   5000,
+    }
+    LoadConfig(config)
+    initLogger()
+    http.HandleFunc("/ws", WebsocketHandler)
+    http.ListenAndServe(":8080", nil)
+}
+// Example of integration in WebsocketHandler
+func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
+    conn, err := upgrader.Upgrade(w, r, nil)
+    if err != nil {
+        LogError("Connect update error", err, map[string]interface{}{
+            "request": r.RemoteAddr,
+        })
+        return
+    }
+    defer conn.Close()
+    LogClientConnection(conn.RemoteAddr().String())
+    for {
+        _, message, err := conn.ReadMessage()
+        if err != nil {
+            LogError("Read message error", err, map[string]interface{}{
+                "connection": conn.RemoteAddr().String(),
+            })
+            break
+        }
+        LogMessage("user", "room", string(message))
+    }
+    LogClientDisconnect(conn.RemoteAddr().String())
+}
+
+func LoginHandler(w http.ResponseWriter, r *http.Request) {
+    var req RegisterRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        LogError("Decoding request error", err, map[string]interface{}{
+            "request": r.RemoteAddr,
+        })
+        SendError(w, http.StatusBadRequest, "Incorrect request")
+        return
+    }
+    user, err := LoginUser(req.Username, req.Password)
+    if err != nil {
+        LogAuthError(req.Username, err, map[string]interface{}{
+            "attempt": r.RemoteAddr,
+        })
+        SendError(w, http.StatusUnauthorized, "Incorrect data")
+        return
+    }
+    LogSuccess("Successful authorization", map[string]interface{}{
+        "user": req.Username,
+    })
+    //...
+}
+//Additional func for ELK
+func InitELKLogging(host string, port int) {
+    zerolog.Logger.Info().
+        Socket(host, port).
+        Send()
+}
+
+func ChangeLogLevel(newLevel string) {
+    switch newLevel {
+    case "debug":
+        logger.SetLevel(logrus.DebugLevel)
+    case "info":
+        logger.SetLevel(logrus.InfoLevel)
+    case "warn":
+        logger.SetLevel(logrus.WarnLevel)
+    case "error":
+        logger.SetLevel(logrus.ErrorLevel)
+    default:
+        LogWarning("Incorrect log level", map[string]interface{}{
+            "requested_level": newLevel,
+        })
+    }
+}
